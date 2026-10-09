@@ -5,14 +5,15 @@ FROM alpine:3.19
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/main" > /etc/apk/repositories && \
     echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/community" >> /etc/apk/repositories
 
-# 2. 安装所有编译依赖包 (特别加入 pkgconf, cmake, samurai)
+# 2. 安装所有编译依赖包 (补全 opus-dev、libcap-dev 等)
 RUN apk add --no-cache \
     build-base git gperf linux-headers pkgconf cmake samurai \
-    glib-dev openssl-dev curl-dev \
+    glib-dev openssl-dev curl-dev opus-dev \
     spandsp-dev ffmpeg-dev libevent-dev libpcap-dev \
     json-glib-dev mariadb-dev hiredis-dev libwebsockets-dev \
     libmnl-dev libnftnl-dev pcre2-dev iptables-dev \
-    libjwt-dev zlib-dev libnetfilter_conntrack-dev bash
+    libjwt-dev zlib-dev libnetfilter_conntrack-dev \
+    libcap-dev bsd-compat-headers bash
 
 # 3. 源码编译并安装 bcg729 (Alpine 官方源缺少此 -dev 包)
 RUN git clone https://github.com/BelledonneCommunications/bcg729.git /tmp/bcg729 && \
@@ -27,11 +28,12 @@ COPY . .
 # 4. 修复换行符
 RUN find /usr/local/src/rtpengine -type f -exec sed -i 's/\r$//' {} \;
 
-# 5. 编译并放置二进制文件
-RUN cd /usr/local/src/rtpengine/daemon && make -j$(nproc)
-RUN cp /usr/local/src/rtpengine/daemon/rtpengine /usr/local/bin/rtpengine
+# 5. 编译 daemon
+WORKDIR /usr/local/src/rtpengine/daemon
+RUN make -j$(nproc)
 
-# 6. 清理源码与临时编译依赖 (极简镜像体积)
-RUN rm -rf /usr/local/src/rtpengine
+# 6. 提取二进制并清理
+RUN cp rtpengine /usr/local/bin/rtpengine && \
+    rm -rf /usr/local/src/rtpengine
 
 CMD ["rtpengine", "-f"]
