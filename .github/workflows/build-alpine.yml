@@ -1,4 +1,4 @@
-# 阶段 1: 在 Alpine 环境中编译
+# 階段 1: 在 Alpine 環境中編譯
 FROM alpine:3.19 AS builder
 
 RUN apk add --no-cache \
@@ -12,8 +12,8 @@ COPY . .
 
 RUN cd daemon && make -j$(nproc)
 
-# 阶段 2: 纯 Alpine 运行镜像（体积仅 ~60MB）
-FROM alpine:3.24
+# 階段 2: 運行環境
+FROM alpine:3.19
 
 RUN apk add --no-cache \
     glib openssl libcurl spandsp ffmpeg-libs \
