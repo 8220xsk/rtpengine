@@ -1,24 +1,29 @@
-# 阶段 1: 在 Alpine 环境中编译
-FROM alpine:3.24 AS builder
+# 階段 1: 完整 Alpine 編譯環境
+FROM alpine:3.19 AS builder
 
+# 安裝 rtpengine 所需的所有 Alpine 開發庫
 RUN apk add --no-cache \
     build-base git glib-dev openssl-dev curl-dev \
     spandsp-dev ffmpeg-dev libevent-dev libpcap-dev \
     json-glib-dev mariadb-dev hiredis-dev libwebsockets-dev \
-    libmnl-dev libnftnl-dev gperf
+    libmnl-dev libnftnl-dev gperf pcre2-dev \
+    iptables-dev bcg729-dev libjwt-dev \
+    linux-headers bash
 
 WORKDIR /usr/src/rtpengine
 COPY . .
 
+# 執行 make，若出錯輸出詳細日誌
 RUN cd daemon && make -j$(nproc)
 
-# 阶段 2: 纯 Alpine 运行镜像（体积仅 ~60MB）
-FROM alpine:3.24
+# 階段 2: 運行環境
+FROM alpine:3.19
 
 RUN apk add --no-cache \
     glib openssl libcurl spandsp ffmpeg-libs \
     libevent libpcap json-glib mariadb-connector-c \
-    hiredis libwebsockets libmnl libnftnl iptables bash
+    hiredis libwebsockets libmnl libnftnl iptables \
+    pcre2 bcg729 libjwt bash
 
 COPY --from=builder /usr/src/rtpengine/daemon/rtpengine /usr/local/bin/rtpengine
 
