@@ -1,39 +1,35 @@
-# 阶段 1: 完整 Alpine 编译环境
-FROM alpine:3.19 AS builder
-
-# 1. 启用 main 和 community 仓库
-RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/main" > /etc/apk/repositories && \
-    echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/community" >> /etc/apk/repositories
-
-# 2. 安装 rtpengine make 所需的所有依赖包与 C/C++ 开发库
-RUN apk add --no-cache \
-    build-base git glib-dev openssl-dev curl-dev \
-    spandsp-dev ffmpeg-dev libevent-dev libpcap-dev \
-    json-glib-dev mariadb-dev hiredis-dev libwebsockets-dev \
-    libmnl-dev libnftnl-dev gperf pcre2-dev \
-    iptables-dev libjwt-dev linux-headers bash \
-    bcg729-dev zlib-dev libnetfilter_conntrack-dev
-
-WORKDIR /usr/src/rtpengine
-COPY . .
-
-# 3. 编译 daemon
-RUN cd daemon && make -j$(nproc)
-
-# 阶段 2: 极简 Alpine 运行环境 (最终镜像仅约 60MB~80MB)
+# rtpengine docker 化 (Alpine 版)
+# 版本: mr13.5.1.27
 FROM alpine:3.19
 
+# 1. 启用 main 与 community 镜像源
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/main" > /etc/apk/repositories && \
     echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/community" >> /etc/apk/repositories
 
-RUN apk add --no-cache \
-    glib openssl libcurl spandsp ffmpeg-libs \
-    libevent libpcap json-glib mariadb-connector-c \
-    hiredis libwebsockets libmnl libnftnl iptables \
-    pcre2 libjwt bcg729 bash
+COPY ./rtpengine.mr13.5.1.27 /usr/local/src/rtpengine
 
-COPY --from=builder /usr/src/rtpengine/daemon/rtpengine /usr/local/bin/rtpengine
+# 2. 修复 CRLF 换行符（防止 Windows 克隆代码导致 /bin/bash\r 或 make 报错）
+RUN apk add --no-cache sed && \
+    find /usr/local/src/rtpengine -type f -exec sed -i 's/\r$//' {} \;
 
-EXPOSE 22222/udp 60000-65000/udp
+# 3. 安装编译依赖 -> 编译并安装 -> 清理构建工具与临时文件
+RUN apk add --no-cache --virtual .build-deps \
+        build-base git gperf linux-headers \
+        glib-dev openssl-dev curl-dev \
+        spandsp-dev ffmpeg-dev libevent-dev libpcap-dev \
+        json-glib-dev mariadb-dev hiredis-dev libwebsockets-dev \
+        libmnl-dev libnftnl-dev pcre2-dev iptables-dev \
+        libjwt-dev bcg729-dev zlib-dev libnetfilter_conntrack-dev \
+    && apk add --no-cache \
+        glib openssl libcurl spandsp ffmpeg-libs \
+        libevent libpcap json-glib mariadb-connector-c \
+        hiredis libwebsockets libmnl libnftnl iptables \
+        pcre2 libjwt bcg729 bash \
+    && cd /usr/local/src/rtpengine/daemon \
+    && make -j$(nproc) \
+    && cp rtpengine /usr/local/bin/rtpengine \
+    && cd / \
+    && rm -rf /usr/local/src/rtpengine \
+    && apk del .build-deps
 
-CMD ["rtpengine", "--foreground"]
+CMD ["rtpengine", "-f"]
