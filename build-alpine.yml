@@ -1,0 +1,27 @@
+# 阶段 1: 在 Alpine 环境中编译
+FROM alpine:3.19 AS builder
+
+RUN apk add --no-cache \
+    build-base git glib-dev openssl-dev curl-dev \
+    spandsp-dev ffmpeg-dev libevent-dev libpcap-dev \
+    json-glib-dev mariadb-dev hiredis-dev libwebsockets-dev \
+    libmnl-dev libnftnl-dev gperf
+
+WORKDIR /usr/src/rtpengine
+COPY . .
+
+RUN cd daemon && make -j$(nproc)
+
+# 阶段 2: 纯 Alpine 运行镜像（体积仅 ~60MB）
+FROM alpine:3.24
+
+RUN apk add --no-cache \
+    glib openssl libcurl spandsp ffmpeg-libs \
+    libevent libpcap json-glib mariadb-connector-c \
+    hiredis libwebsockets libmnl libnftnl iptables bash
+
+COPY --from=builder /usr/src/rtpengine/daemon/rtpengine /usr/local/bin/rtpengine
+
+EXPOSE 22222/udp 60000-65000/udp
+
+CMD ["rtpengine", "--foreground"]
