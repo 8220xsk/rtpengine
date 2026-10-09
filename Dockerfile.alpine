@@ -1,36 +1,37 @@
-# rtpengine Alpine 构建与瘦身 (单阶段安装/卸载构建依赖)
+# rtpengine Alpine 极简构建 (适配 13.5)
 FROM alpine:3.19
 
-# 1. 启用 main 与 community 镜像源
+# 1. 开启软件源
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/main" > /etc/apk/repositories && \
     echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/community" >> /etc/apk/repositories
 
-# 2. 将当前仓库根目录下的源码复制到容器内
+# 2. 安装所有编译依赖包 (特别加入 pkgconf, cmake, samurai)
+RUN apk add --no-cache \
+    build-base git gperf linux-headers pkgconf cmake samurai \
+    glib-dev openssl-dev curl-dev \
+    spandsp-dev ffmpeg-dev libevent-dev libpcap-dev \
+    json-glib-dev mariadb-dev hiredis-dev libwebsockets-dev \
+    libmnl-dev libnftnl-dev pcre2-dev iptables-dev \
+    libjwt-dev zlib-dev libnetfilter_conntrack-dev bash
+
+# 3. 源码编译并安装 bcg729 (Alpine 官方源缺少此 -dev 包)
+RUN git clone https://github.com/BelledonneCommunications/bcg729.git /tmp/bcg729 && \
+    cd /tmp/bcg729 && \
+    cmake -B build -G Ninja -DCMAKE_INSTALL_PREFIX=/usr && \
+    ninja -C build install && \
+    rm -rf /tmp/bcg729
+
 WORKDIR /usr/local/src/rtpengine
 COPY . .
 
-# 3. 修复 Windows CRLF 换行符
-RUN apk add --no-cache sed && \
-    find /usr/local/src/rtpengine -type f -exec sed -i 's/\r$//' {} \;
+# 4. 修复换行符
+RUN find /usr/local/src/rtpengine -type f -exec sed -i 's/\r$//' {} \;
 
-# 4. 安装编译工具 -> 编译 daemon -> 清理工具 (最终镜像仅约 60MB~80MB)
-RUN apk add --no-cache --virtual .build-deps \
-        build-base git gperf linux-headers \
-        glib-dev openssl-dev curl-dev \
-        spandsp-dev ffmpeg-dev libevent-dev libpcap-dev \
-        json-glib-dev mariadb-dev hiredis-dev libwebsockets-dev \
-        libmnl-dev libnftnl-dev pcre2-dev iptables-dev \
-        libjwt-dev bcg729-dev zlib-dev libnetfilter_conntrack-dev \
-    && apk add --no-cache \
-        glib openssl libcurl spandsp ffmpeg-libs \
-        libevent libpcap json-glib mariadb-connector-c \
-        hiredis libwebsockets libmnl libnftnl iptables \
-        pcre2 libjwt bcg729 bash \
-    && cd /usr/local/src/rtpengine/daemon \
-    && make -j$(nproc) \
-    && cp rtpengine /usr/local/bin/rtpengine \
-    && cd / \
-    && rm -rf /usr/local/src/rtpengine \
-    && apk del .build-deps
+# 5. 编译并放置二进制文件
+RUN cd /usr/local/src/rtpengine/daemon && make -j$(nproc)
+RUN cp /usr/local/src/rtpengine/daemon/rtpengine /usr/local/bin/rtpengine
+
+# 6. 清理源码与临时编译依赖 (极简镜像体积)
+RUN rm -rf /usr/local/src/rtpengine
 
 CMD ["rtpengine", "-f"]
