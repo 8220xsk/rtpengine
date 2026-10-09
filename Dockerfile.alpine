@@ -1,18 +1,19 @@
-# rtpengine docker 化 (Alpine 版)
-# 版本: mr13.5.1.27
+# rtpengine Alpine 构建与瘦身 (单阶段安装/卸载构建依赖)
 FROM alpine:3.19
 
 # 1. 启用 main 与 community 镜像源
 RUN echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/main" > /etc/apk/repositories && \
     echo "http://dl-cdn.alpinelinux.org/alpine/v3.19/community" >> /etc/apk/repositories
 
-COPY ./rtpengine.mr13.5.1.27 /usr/local/src/rtpengine
+# 2. 将当前仓库根目录下的源码复制到容器内
+WORKDIR /usr/local/src/rtpengine
+COPY . .
 
-# 2. 修复 CRLF 换行符（防止 Windows 克隆代码导致 /bin/bash\r 或 make 报错）
+# 3. 修复 Windows CRLF 换行符
 RUN apk add --no-cache sed && \
     find /usr/local/src/rtpengine -type f -exec sed -i 's/\r$//' {} \;
 
-# 3. 安装编译依赖 -> 编译并安装 -> 清理构建工具与临时文件
+# 4. 安装编译工具 -> 编译 daemon -> 清理工具 (最终镜像仅约 60MB~80MB)
 RUN apk add --no-cache --virtual .build-deps \
         build-base git gperf linux-headers \
         glib-dev openssl-dev curl-dev \
