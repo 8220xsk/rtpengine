@@ -1,27 +1,31 @@
-# 階段 1: 在 Alpine 環境中編譯
-FROM alpine:3.19 AS builder
+name: Build Alpine Docker Image
 
-RUN apk add --no-cache \
-    build-base git glib-dev openssl-dev curl-dev \
-    spandsp-dev ffmpeg-dev libevent-dev libpcap-dev \
-    json-glib-dev mariadb-dev hiredis-dev libwebsockets-dev \
-    libmnl-dev libnftnl-dev gperf
+on:
+  workflow_dispatch: # 允许在 GitHub 页面手动点按钮触发
 
-WORKDIR /usr/src/rtpengine
-COPY . .
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # 允许将镜像推送到 GHCR 镜像库
 
-RUN cd daemon && make -j$(nproc)
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-# 階段 2: 運行環境
-FROM alpine:3.19
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-RUN apk add --no-cache \
-    glib openssl libcurl spandsp ffmpeg-libs \
-    libevent libpcap json-glib mariadb-connector-c \
-    hiredis libwebsockets libmnl libnftnl iptables bash
-
-COPY --from=builder /usr/src/rtpengine/daemon/rtpengine /usr/local/bin/rtpengine
-
-EXPOSE 22222/udp 60000-65000/udp
-
-CMD ["rtpengine", "--foreground"]
+      - name: Build and Push Alpine Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.alpine
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/rtpengine:alpine
