@@ -1,5 +1,5 @@
 # 阶段 1: 在 Alpine 环境中编译
-FROM alpine:3.19 AS builder
+FROM alpine:3.24 AS builder
 
 RUN apk add --no-cache \
     build-base git glib-dev openssl-dev curl-dev \
